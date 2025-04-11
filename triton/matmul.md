@@ -1,7 +1,7 @@
 # OpenAI Triton 简介（二）
 
 <div style="text-align: center;">
-    <img src="https://raw.githubusercontent.com/InfiniTensor/wechat/refs/heads/master/triton/images/triton-logo.png" style="max-width: 25%; height: auto;">
+    <img src="https://raw.githubusercontent.com/InfiniTensor/resources/refs/heads/master/triton/images/triton-logo.png" style="max-width: 25%; height: auto;">
 </div>
 
 感谢大家关注我们的公众号，这是我们《OpenAI Triton 简介》系列的第二篇文章。在上一篇文章里，我们已经简单地介绍了 Triton，并且讲解了一个由 Triton 写成的向量加法计算内核。当然，由于向量加法在任何编程模型里都很简单，Triton 的优越性可能并没有得到良好的展现。接下来，让我们一起来看看如何使用 Triton 实现高性能的矩阵乘法。注：本文代码主要来自 Triton 的[官方教程](https://triton-lang.org/main/getting-started/tutorials/01-vector-add.html)。
@@ -228,7 +228,7 @@ for m in range(0, M, BLOCK_SIZE_M):
 这套算法的原理就是把 $A$、$B$、$C$ 三个矩阵（其中 $A$ 的大小是 $(M, K)$，$B$ 的大小是 $(K, N)$），按照 `BLOCK_SIZE_M`、`BLOCK_SIZE_N` 、`BLOCK_SIZE_K`三个大小，切成若干块，再进行计算。这样做的好处就是，我们可以将 `m` 和 `n` 两个 `for` 循环在 GPU 上进行并行，从而充分利用 GPU 善于并行的特质。大家可以结合以下这张示意图进行理解。
 
 <div style="text-align: center;">
-    <img src="https://raw.githubusercontent.com/InfiniTensor/wechat/refs/heads/master/triton/images/tiled-matmul.png">
+    <img src="https://raw.githubusercontent.com/InfiniTensor/resources/refs/heads/master/triton/images/tiled-matmul.png">
 </div>
 
 如图所示，每个 $C$ 的分块，都对应一行 $A$ 的分块和一列 $B$ 的分块。我们从左到右遍历 $A$ 中的那行分块，同时从上到下遍历 $B$ 中的那列分块，使得 $A$ 和 $B$ 的分块一一对应，遍历的过程中把分块之间矩阵乘法的结果累积起来，最终的结果存入对应的 $C$ 的分块中。
@@ -272,7 +272,7 @@ pid_n = pid % grid_n
 这样的话，矩阵乘法的并行计算就会如下图所示：
 
 <div style="text-align: center;">
-    <img src="https://raw.githubusercontent.com/InfiniTensor/wechat/refs/heads/master/triton/images/row-major-ordering.png">
+    <img src="https://raw.githubusercontent.com/InfiniTensor/resources/refs/heads/master/triton/images/row-major-ordering.png">
 </div>
 
 假如我们所计算的 $A$、$B$、$C$ 都被分成了 $9$ x $9$ 这么多的块，那么每计算出一行 $C$ 的分块，也就是每写入 $9$ 个 $C$ 的分块，我们都需要读取 $9$ 个 $A$ 的分块和 $81$ 个 $B$ 的分块，也就是总共读取 $90$ 个分块。
@@ -304,7 +304,7 @@ pid_n = (pid % num_pid_in_group) // group_size_m
 这样的话，矩阵乘法的并行计算就会如下图所示：
 
 <div style="text-align: center;">
-    <img src="https://raw.githubusercontent.com/InfiniTensor/wechat/refs/heads/master/triton/images/grouped-ordering.png">
+    <img src="https://raw.githubusercontent.com/InfiniTensor/resources/refs/heads/master/triton/images/grouped-ordering.png">
 </div>
 
 可以看出，现在每写入 $9$ 个 $C$ 的分块，我们就只需要读取 $27$ 个 $A$ 的分块和 $27$ 个 $B$ 的分块，也就是总共读取 $54$ 个分块，减少了总共的内存访问，从而可以提升计算内核的性能。而这也正是 `matmul_kernel` 最开始那部分代码的来历。

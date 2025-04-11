@@ -1,7 +1,7 @@
 # OpenAI Triton 简介（一）
 
 <div style="text-align: center;">
-    <img src="https://github.com/InfiniTensor/wechat/blob/master/triton/images/triton-logo.png?raw=true" style="max-width: 25%; height: auto;">
+    <img src="https://github.com/InfiniTensor/resources/blob/master/triton/images/triton-logo.png?raw=true" style="max-width: 25%; height: auto;">
 </div>
 
 感谢大家关注我们的公众号，如果您已经浏览过前面几篇文章，应该已经发现我们主要介绍一些 AI 领域底层的内容，比如如何使用 CUDA 编写各种算子，如何在寒武纪芯片上编程等等。今天的主角也与此相关，它是一门专注于深度学习领域的编程语言，对神经网络核函数的编写进行了抽象，使得高性能核函数的开发变得更加容易。与 C++、Rust、Python 等跨领域通用计算机语言不同，它是一门领域特定语言（以下简称 DSL），只专注于核函数的开发这一件事，但是也得益于此，它在这一方面非常在行。这位主角的名字就是：Triton。注意不要跟英伟达的推理服务器 Triton 搞混，这篇文章将要介绍的 Triton 是指目前 OpenAI 的 Triton，它们俩是重名。
@@ -52,7 +52,7 @@ def add_kernel(x_ptr,  # *Pointer* to first input vector.
 简单来说，我们可以想象一个向量是一长根面条，分块就是把一根面条切成若干份小面条。我们同样可以把维度上升，比如矩阵就是张大饼，分块就是切出来的小饼。当然了，实际情况肯定比切面条和切饼复杂，比如怎么切，切多大，切出来的部分有什么顺序关系，但大家还是可以通过这样想象来进行理解。那么问题来了，我们为什么要分块呢？大饼好端端的，我切成小饼干啥？这就涉及到硬件的架构了，我们可以把 GPU 的运行理解成，一开始 CPU 会送来一张大饼，放在一张大桌子上，我们有一堆厨师，每一位厨师都要处理大饼的一部分，但他们得在自己的房间才有厨具处理，所以想要处理，就得有人从大饼上切下来这部分，送到厨师的房间，厨师放在自己的小桌子上加工，加工完再叫人送回去，但厨师不知道他们要做什么菜，只能听从厨师长的吩咐，所以每进行一步工序都得如此。如果只有一步工序，反正也只来回送两次，倒是没什么，但如果工序多了起来，那么反复送饼就会浪费很多时间，倒不如厨师长先分好饼，整明白啥工序可以合在一起给一位厨师完成，然后就能放在厨师的小桌子上，让尽量多的工序一次性完成，减少往返的次数，这样就提高了效率。而那张大桌子就是 GPU 的全局内存（global memory），小桌子则是 GPU 的共享内存（shared memory），而厨师就是程序（program）。理解了这些，现在就让我们看看函数体里都有什么吧。
 
 <div style="text-align: center;">
-    <img src="https://github.com/InfiniTensor/wechat/blob/master/triton/images/gpu-kitchen.jpg?raw=true" style="max-width: 50%; height: auto;">
+    <img src="https://github.com/InfiniTensor/resources/blob/master/triton/images/gpu-kitchen.jpg?raw=true" style="max-width: 50%; height: auto;">
 </div>
 
 首先第一行是 `pid = tl.program_id(axis=0)`，这一行很简单，就是搞明白我们是哪一位厨师，毕竟这关系到了我要处理哪部分饼。接下来的两行就是在计算 `offsets`，以便于后面定义 `mask` 和定位指针。大家注意 `offsets` 的定义中有一项 `tl.arange(0, BLOCK_SIZE)`，这是因为一个分块有这么多个元素，我们都需要进行计算，第一个元素是 `block_start + 0`，而最后一个元素是 `block_start + BLOCK_SIZE - 1`， 所以 `offsets` 才是复数形式，它是整个分块每个元素的 `offsets`。但要注意的是，为了使这个核函数能够给任意大小的向量使用，我们必须再提供一个 `mask`，因为有些形状的向量，分块之后，最后的一个分块可能不足 `BLOCK_SIZE` 个，这时候我们就得忽略掉缺少的部分才行，所以我们只计算 `offsets < n_elements` 的部分，这就是 `mask`。好了，有了这些准备工作，剩下的内容就没什么了，我们先是从指针指向的位置把 `x` 和 `y` 当前分块的元素都 `load` 进来，加在一起，之后再 `store` 进 `output`，就完成了对这个分块的操作。由于参数张量被分成的每一块都被执行了这样的操作，因此即便对于整体而言，加法也被完成了。
