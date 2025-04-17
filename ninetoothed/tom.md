@@ -301,11 +301,11 @@ import torch
 dtype = torch.float16
 device = "cuda"
 
-lhs = torch.tensor(((1, 2), (3, 4)), dtype=dtype, device=device)
-rhs = torch.tensor(((5, 6), (7, 8)), dtype=dtype, device=device)
+input = torch.tensor(((1, 2), (3, 4)), dtype=dtype, device=device)
+other = torch.tensor(((5, 6), (7, 8)), dtype=dtype, device=device)
 
-output = torch.empty((lhs.shape[0], rhs.shape[1]), dtype=dtype, device=device)
-kernel(lhs, rhs, output)
+output = torch.empty((input.shape[0], other.shape[1]), dtype=dtype, device=device)
+kernel(input, other, output)
 
 reference = torch.tensor(((19, 22), (43, 50)), dtype=dtype, device=device)
 assert torch.allclose(output, reference)
